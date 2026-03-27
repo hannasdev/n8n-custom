@@ -1,0 +1,160 @@
+{
+	"id": "bambulab-notifications",
+	"name": "Bambu Lab Printer Notifications",
+	"active": false,
+	"settings": { "executionOrder": "v1" },
+	"nodes": [
+		{
+			"id": "n1",
+			"name": "Bambu Lab Printer Trigger",
+			"type": "CUSTOM.bambuLabTrigger",
+			"typeVersion": 1,
+			"position": [240, 320],
+			"parameters": {
+				"pollInterval": 30,
+				"responseMode": "summary",
+				"stateChangeOnly": true
+			},
+			"notesInFlow": true,
+			"notes": "Polls every 30 s. Only emits when printer state changes.\nAssign your 'Bambu Lab Local' credential before activating."
+		},
+		{
+			"id": "n2",
+			"name": "Print Complete?",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2,
+			"position": [500, 320],
+			"parameters": {
+				"conditions": {
+					"options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+					"conditions": [
+						{
+							"id": "c1",
+							"leftValue": "={{ $json.state }}",
+							"rightValue": "FINISH",
+							"operator": { "type": "string", "operation": "equals" }
+						}
+					],
+					"combinator": "and"
+				}
+			}
+		},
+		{
+			"id": "n3",
+			"name": "Printer Error?",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2,
+			"position": [500, 520],
+			"parameters": {
+				"conditions": {
+					"options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+					"conditions": [
+						{
+							"id": "c2",
+							"leftValue": "={{ $json.error_code }}",
+							"rightValue": 0,
+							"operator": { "type": "number", "operation": "notEquals" }
+						}
+					],
+					"combinator": "and"
+				}
+			}
+		},
+		{
+			"id": "n4",
+			"name": "Compose: Print Complete",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3,
+			"position": [760, 220],
+			"parameters": {
+				"mode": "manual",
+				"fields": {
+					"values": [
+						{ "name": "subject", "type": "stringValue", "value": "Print Complete" },
+						{
+							"name": "message",
+							"type": "stringValue",
+							"value": "={{ $json.task_name || 'Your print' }} finished! Progress: {{ $json.progress_pct }}% | Layers: {{ $json.current_layer }}/{{ $json.total_layers }}"
+						},
+						{ "name": "state", "type": "stringValue", "value": "={{ $json.state }}" },
+						{ "name": "task_name", "type": "stringValue", "value": "={{ $json.task_name }}" },
+						{ "name": "finished_at", "type": "stringValue", "value": "={{ $json.received_at }}" }
+					]
+				}
+			},
+			"notesInFlow": true,
+			"notes": "Connect the output to Slack, Gmail, webhook, or any notification node."
+		},
+		{
+			"id": "n5",
+			"name": "Compose: Error Alert",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3,
+			"position": [760, 520],
+			"parameters": {
+				"mode": "manual",
+				"fields": {
+					"values": [
+						{ "name": "subject", "type": "stringValue", "value": "Printer Error Detected" },
+						{
+							"name": "message",
+							"type": "stringValue",
+							"value": "Printer error {{ $json.error_code }} on task '{{ $json.task_name || 'unknown' }}'. State: {{ $json.state }}"
+						},
+						{ "name": "error_code", "type": "numberValue", "value": "={{ $json.error_code }}" },
+						{ "name": "state", "type": "stringValue", "value": "={{ $json.state }}" },
+						{ "name": "task_name", "type": "stringValue", "value": "={{ $json.task_name }}" },
+						{ "name": "detected_at", "type": "stringValue", "value": "={{ $json.received_at }}" }
+					]
+				}
+			},
+			"notesInFlow": true,
+			"notes": "Connect the output to Slack, Gmail, webhook, or any notification node."
+		},
+		{
+			"id": "n6",
+			"name": "Send Notification",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [1020, 320],
+			"parameters": {},
+			"notesInFlow": true,
+			"notes": "Replace this node with Slack / Gmail / HTTP Request / Telegram etc.\nBoth message paths merge here — $json.subject and $json.message are ready to use."
+		},
+		{
+			"id": "n7",
+			"name": "Note",
+			"type": "n8n-nodes-base.stickyNote",
+			"typeVersion": 1,
+			"position": [220, 160],
+			"parameters": {
+				"content": "## Bambu Lab Printer Notifications\n\nThis workflow reacts in real time to printer state changes.\n\n**Setup:**\n1. Assign the **Bambu Lab Local** credential to the trigger node\n2. Replace **Send Notification** with your preferred channel (Slack, Gmail, HTTP Request, etc.)\n3. Activate the workflow\n\n**What fires:**\n- **Print Complete** — state transitions to `FINISH`\n- **Error Alert** — `error_code` becomes non-zero\n\nAll other state changes are ignored.",
+				"height": 260,
+				"width": 860,
+				"color": 7
+			}
+		}
+	],
+	"connections": {
+		"Bambu Lab Printer Trigger": {
+			"main": [
+				[
+					{ "node": "Print Complete?", "type": "main", "index": 0 },
+					{ "node": "Printer Error?", "type": "main", "index": 0 }
+				]
+			]
+		},
+		"Print Complete?": {
+			"main": [[{ "node": "Compose: Print Complete", "type": "main", "index": 0 }], []]
+		},
+		"Printer Error?": {
+			"main": [[{ "node": "Compose: Error Alert", "type": "main", "index": 0 }], []]
+		},
+		"Compose: Print Complete": {
+			"main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]]
+		},
+		"Compose: Error Alert": {
+			"main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]]
+		}
+	}
+}
