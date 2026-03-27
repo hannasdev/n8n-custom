@@ -15,7 +15,7 @@
 		{
 			"id": "2",
 			"name": "Get Printer Status",
-			"type": "n8n-nodes-custom.bambuLab",
+			"type": "CUSTOM.bambuLab",
 			"typeVersion": 1,
 			"position": [460, 300],
 			"parameters": {
@@ -47,7 +47,7 @@
 		{
 			"id": "4",
 			"name": "Send Raw Command",
-			"type": "n8n-nodes-custom.bambuLab",
+			"type": "CUSTOM.bambuLab",
 			"typeVersion": 1,
 			"position": [460, 480],
 			"parameters": {
