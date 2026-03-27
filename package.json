@@ -21,6 +21,7 @@
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
+		"check:n8n-version": "echo Running: && docker compose exec n8n n8n --version && echo Latest: && npm view n8n version",
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
