@@ -22,12 +22,6 @@
 				"operation": "getStatus",
 				"timeoutMs": 10000
 			},
-			"credentials": {
-				"bambuLabLanApi": {
-					"id": "",
-					"name": "Bambu Lab Local"
-				}
-			},
 			"notesInFlow": true,
 			"notes": "Connects to the printer via local MQTT and requests a full status push.\nConfigure the 'Bambu Lab Local' credential with your printer IP, serial, and access code."
 		},
@@ -39,7 +33,7 @@
 			"position": [700, 300],
 			"parameters": {
 				"mode": "runOnceForEachItem",
-				"jsCode": "// Bambu printers wrap status inside a 'print' key\nconst p = $json?.print ?? $json;\n\nreturn {\n  // identity\n  printer_model:   $json?.info?.machine_type ?? 'unknown',\n  // print job\n  gcode_state:     p.gcode_state ?? 'unknown',\n  print_percent:   p.mc_percent ?? 0,\n  remaining_min:   p.mc_remaining_time ?? null,\n  task_name:       p.subtask_name ?? '',\n  // temperatures\n  nozzle_temp:     p.nozzle_temper ?? null,\n  nozzle_target:   p.nozzle_target_temper ?? null,\n  bed_temp:        p.bed_temper ?? null,\n  bed_target:      p.bed_target_temper ?? null,\n  // fan speeds\n  fan_gear:        p.fan_gear ?? null,\n  heatbreak_fan:   p.heatbreak_fan_speed ?? null,\n  // error\n  error_code:      p.print_error ?? 0,\n  // raw in case you need to inspect further\n  _raw:            $json\n};"
+				"jsCode": "const p = $json?.print ?? $json;\nconst tray = p.vt_tray ?? {};\nconst online = p.online ?? {};\n\nreturn {\n  state: p.gcode_state ?? 'unknown',\n  print_type: p.print_type ?? 'unknown',\n  stage: p.mc_print_stage ?? null,\n  progress_pct: Number(p.mc_percent ?? 0),\n  remaining_min: Number(p.mc_remaining_time ?? 0),\n  current_layer: Number(p.layer_num ?? 0),\n  total_layers: Number(p.total_layer_num ?? 0),\n  task_name: p.subtask_name ?? '',\n  project_id: p.project_id ?? '',\n  task_id: p.task_id ?? '',\n  wifi_signal: p.wifi_signal ?? '',\n  nozzle_temp_c: Number(p.nozzle_temper ?? 0),\n  nozzle_target_c: Number(p.nozzle_target_temper ?? 0),\n  bed_temp_c: Number(p.bed_temper ?? 0),\n  bed_target_c: Number(p.bed_target_temper ?? 0),\n  chamber_temp_c: Number(p.chamber_temper ?? 0),\n  heatbreak_fan_speed: Number(p.heatbreak_fan_speed ?? 0),\n  cooling_fan_speed: Number(p.cooling_fan_speed ?? 0),\n  aux_fan1_speed: Number(p.big_fan1_speed ?? 0),\n  aux_fan2_speed: Number(p.big_fan2_speed ?? 0),\n  speed_level: Number(p.spd_lvl ?? 0),\n  speed_percent: Number(p.spd_mag ?? 0),\n  error_code: Number(p.print_error ?? 0),\n  chamber_light: Array.isArray(p.lights_report) ? p.lights_report.find((light) => light.node === 'chamber_light')?.mode ?? '' : '',\n  ams_status: Number(p.ams_status ?? 0),\n  active_tray_id: tray.id ?? '',\n  tray_type: tray.tray_type ?? '',\n  tray_material: tray.tray_info_idx ?? '',\n  tray_color: tray.tray_color ?? '',\n  tray_k: tray.k ?? null,\n  printer_online: Boolean(online.version || online.ahb || online.rfid),\n  raw_payload: $json,\n};"
 			},
 			"notesInFlow": true,
 			"notes": "Flattens the raw MQTT payload into a clean summary object.\nEdit this node to pull out whatever fields you need."
@@ -54,12 +48,6 @@
 				"operation": "sendCommand",
 				"command": "={{ JSON.stringify({ print: { sequence_id: \"0\", command: \"pause\", param: \"\" } }) }}",
 				"timeoutMs": 10000
-			},
-			"credentials": {
-				"bambuLabLanApi": {
-					"id": "",
-					"name": "Bambu Lab Local"
-				}
 			},
 			"disabled": true,
 			"notesInFlow": true,
