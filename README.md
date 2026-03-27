@@ -87,9 +87,9 @@ Known behavior:
 
 ## Usage
 
-Showcase workflow file:
+Included workflow templates:
 
-- workflows/bambulab-showcase.workflow.json
+- workflows/bambulab-showcase.workflow.json (public example)
 
 Import with CLI:
 
@@ -98,7 +98,7 @@ docker compose exec n8n n8n import:workflow --input=/custom-extensions/my-custom
 After importing:
 
 1. Open the workflow in n8n
-2. Open each Bambu Lab node and select your Bambu Lab Local credential
+2. Open the Bambu Lab nodes and select your Bambu Lab Local credential
 3. Save the workflow
 4. Run manually
 
