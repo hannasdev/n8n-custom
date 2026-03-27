@@ -15,6 +15,13 @@ const PRINT_COMMANDS = {
 	cancel: { print: { sequence_id: '0', command: 'stop', param: '' } },
 } as const;
 
+const OPERATION_TO_COMMAND: Record<string, string> = {
+	getStatus: 'pushall',
+	pausePrint: 'pause',
+	resumePrint: 'resume',
+	cancelPrint: 'stop',
+};
+
 function decodePackedIpv4(value: unknown): string {
 	if (typeof value !== 'number' || !Number.isFinite(value)) {
 		return '';
@@ -70,6 +77,38 @@ function summarizeStatus(response: IDataObject): IDataObject {
 		nozzle_type: print.nozzle_type ?? '',
 		sdcard_mounted: Boolean(print.sdcard),
 		printer_online: Boolean(online.version || online.ahb || online.rfid),
+	};
+}
+
+function summarizeCommandResult(
+	operation: string,
+	response: IDataObject,
+	rawCommand: string | object | undefined,
+): IDataObject {
+	const print = ((response.print as IDataObject | undefined) ?? response) as IDataObject;
+	const responseMsg = Number(print.msg ?? response.msg ?? 0);
+	const responseErrorCode = Number(print.print_error ?? response.print_error ?? 0);
+	const requestedCommandFromJson =
+		typeof rawCommand === 'object' && rawCommand !== null
+			? ((rawCommand as IDataObject).print as IDataObject | undefined)?.command
+			: undefined;
+	const requestedCommand = String(
+		requestedCommandFromJson ?? OPERATION_TO_COMMAND[operation] ?? 'unknown',
+	);
+	const responseCommand = String(print.command ?? response.command ?? '');
+
+	return {
+		requested_operation: operation,
+		requested_command: requestedCommand,
+		response_command: responseCommand,
+		response_msg: responseMsg,
+		response_error_code: responseErrorCode,
+		accepted: responseMsg === 0 && responseErrorCode === 0,
+		note:
+			responseMsg === 0 && responseErrorCode === 0
+				? 'Command accepted by printer (or no error reported)'
+				: 'Printer reported an error or non-zero response code',
+		status: summarizeStatus(response),
 	};
 }
 
@@ -228,7 +267,9 @@ export class BambuLab implements INodeType {
 				const output =
 					responseMode === 'raw'
 						? (response as IDataObject)
-						: summarizeStatus(response as IDataObject);
+						: operation === 'getStatus'
+							? summarizeStatus(response as IDataObject)
+							: summarizeCommandResult(operation, response as IDataObject, rawCommand);
 
 				returnData.push({
 					json: output,
