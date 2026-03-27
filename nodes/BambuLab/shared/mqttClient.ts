@@ -63,14 +63,22 @@ export async function mqttRequest(
 			});
 		});
 
-		client.once('message', (_topic, payload) => {
-			settle(() => {
-				try {
-					resolve(JSON.parse(payload.toString()) as object);
-				} catch {
-					reject(new Error('Printer returned non-JSON payload'));
-				}
-			});
+		client.on('message', (_topic, payload) => {
+			let parsed: object;
+
+			try {
+				parsed = JSON.parse(payload.toString()) as object;
+			} catch {
+				settle(() => reject(new Error('Printer returned non-JSON payload')));
+				return;
+			}
+
+			// Bambu printers can emit an empty acknowledgement frame before the actual report.
+			if (Object.keys(parsed).length === 0) {
+				return;
+			}
+
+			settle(() => resolve(parsed));
 		});
 
 		client.once('error', (err) => {
