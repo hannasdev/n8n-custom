@@ -1,4 +1,4 @@
-# n8n-bambulab
+# n8n-nodes-bambulab
 
 Custom n8n nodes for local printer monitoring and control, built for use with [Bambu Lab](https://bambulab.com) printers over the local network.
 
