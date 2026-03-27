@@ -1,0 +1,77 @@
+{
+	"id": "bambulab-showcase",
+	"name": "Bambu Lab Node Showcase",
+	"active": false,
+	"settings": {},
+	"nodes": [
+		{
+			"id": "1",
+			"name": "Run Manually",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [220, 300],
+			"parameters": {}
+		},
+		{
+			"id": "2",
+			"name": "Get Printer Status",
+			"type": "n8n-nodes-custom.bambuLab",
+			"typeVersion": 1,
+			"position": [460, 300],
+			"parameters": {
+				"operation": "getStatus",
+				"timeoutMs": 10000
+			},
+			"credentials": {
+				"bambuLabLanApi": {
+					"id": "",
+					"name": "Bambu Lab Local"
+				}
+			},
+			"notesInFlow": true,
+			"notes": "Connects to the printer via local MQTT and requests a full status push.\nConfigure the 'Bambu Lab Local' credential with your printer IP, serial, and access code."
+		},
+		{
+			"id": "3",
+			"name": "Extract Key Fields",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [700, 300],
+			"parameters": {
+				"mode": "runOnceForEachItem",
+				"jsCode": "// Bambu printers wrap status inside a 'print' key\nconst p = $json?.print ?? $json;\n\nreturn {\n  // identity\n  printer_model:   $json?.info?.machine_type ?? 'unknown',\n  // print job\n  gcode_state:     p.gcode_state ?? 'unknown',\n  print_percent:   p.mc_percent ?? 0,\n  remaining_min:   p.mc_remaining_time ?? null,\n  task_name:       p.subtask_name ?? '',\n  // temperatures\n  nozzle_temp:     p.nozzle_temper ?? null,\n  nozzle_target:   p.nozzle_target_temper ?? null,\n  bed_temp:        p.bed_temper ?? null,\n  bed_target:      p.bed_target_temper ?? null,\n  // fan speeds\n  fan_gear:        p.fan_gear ?? null,\n  heatbreak_fan:   p.heatbreak_fan_speed ?? null,\n  // error\n  error_code:      p.print_error ?? 0,\n  // raw in case you need to inspect further\n  _raw:            $json\n};"
+			},
+			"notesInFlow": true,
+			"notes": "Flattens the raw MQTT payload into a clean summary object.\nEdit this node to pull out whatever fields you need."
+		},
+		{
+			"id": "4",
+			"name": "Send Raw Command",
+			"type": "n8n-nodes-custom.bambuLab",
+			"typeVersion": 1,
+			"position": [460, 480],
+			"parameters": {
+				"operation": "sendCommand",
+				"command": "={{ JSON.stringify({ print: { sequence_id: \"0\", command: \"pause\", param: \"\" } }) }}",
+				"timeoutMs": 10000
+			},
+			"credentials": {
+				"bambuLabLanApi": {
+					"id": "",
+					"name": "Bambu Lab Local"
+				}
+			},
+			"disabled": true,
+			"notesInFlow": true,
+			"notes": "Example: pause a running print.\nDisabled by default — enable and connect to the trigger above to test.\nOther commands: 'resume', 'stop'. See Bambu MQTT docs for full command list."
+		}
+	],
+	"connections": {
+		"Run Manually": {
+			"main": [[{ "node": "Get Printer Status", "type": "main", "index": 0 }]]
+		},
+		"Get Printer Status": {
+			"main": [[{ "node": "Extract Key Fields", "type": "main", "index": 0 }]]
+		}
+	}
+}
