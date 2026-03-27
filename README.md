@@ -98,6 +98,14 @@ npm run check:n8n-version
 - The MQTT connection to the printer uses TLS on port 8883. Certificate verification is disabled because Bambu printers use a private CA — the connection is still fully encrypted.
 - Do not expose port 8883 or your printer's IP to the public internet.
 
+## Acknowledgements
+
+This integration design benefited significantly from studying the Home Assistant Bambu Lab integration:
+
+- [greghesp/ha-bambulab](https://github.com/greghesp/ha-bambulab)
+
+That project was especially useful for understanding the local-vs-cloud connection model, MQTT interaction patterns, and practical authentication flow design for Bambu printers.
+
 ## Adding more nodes
 
 This package also includes example nodes:
