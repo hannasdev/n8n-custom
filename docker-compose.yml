@@ -1,0 +1,19 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.13.4
+    container_name: n8n-local
+    restart: unless-stopped
+    ports:
+      - '5678:5678'
+    environment:
+      - N8N_CUSTOM_EXTENSIONS=/custom-extensions
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
+      - N8N_UNVERIFIED_PACKAGES_ENABLED=true
+      - GENERIC_TIMEZONE=UTC
+      - TZ=UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./:/custom-extensions/my-custom-node:ro
+
+volumes:
+  n8n_data:
