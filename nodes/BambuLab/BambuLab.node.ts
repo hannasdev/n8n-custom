@@ -88,10 +88,22 @@ function summarizeCommandResult(
 	const print = ((response.print as IDataObject | undefined) ?? response) as IDataObject;
 	const responseMsg = Number(print.msg ?? response.msg ?? 0);
 	const responseErrorCode = Number(print.print_error ?? response.print_error ?? 0);
+	let commandPayload: IDataObject | undefined;
+
+	if (typeof rawCommand === 'string') {
+		try {
+			commandPayload = JSON.parse(rawCommand) as IDataObject;
+		} catch {
+			commandPayload = undefined;
+		}
+	} else if (typeof rawCommand === 'object' && rawCommand !== null) {
+		commandPayload = rawCommand as IDataObject;
+	}
+
 	const requestedCommandFromJson =
-		typeof rawCommand === 'object' && rawCommand !== null
-			? ((rawCommand as IDataObject).print as IDataObject | undefined)?.command
-			: undefined;
+		(commandPayload?.print as IDataObject | undefined)?.command ??
+		(commandPayload?.pushing as IDataObject | undefined)?.command ??
+		commandPayload?.command;
 	const requestedCommand = String(
 		requestedCommandFromJson ?? OPERATION_TO_COMMAND[operation] ?? 'unknown',
 	);
