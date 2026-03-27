@@ -1,12 +1,101 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
+	INode,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { mqttRequest, PUSH_ALL, type BambuLanCredentials } from './shared/mqttClient';
+
+const PRINT_COMMANDS = {
+	pause: { print: { sequence_id: '0', command: 'pause', param: '' } },
+	resume: { print: { sequence_id: '0', command: 'resume', param: '' } },
+	cancel: { print: { sequence_id: '0', command: 'stop', param: '' } },
+} as const;
+
+function decodePackedIpv4(value: unknown): string {
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		return '';
+	}
+
+	return [0, 8, 16, 24].map((shift) => String((value >> shift) & 255)).join('.');
+}
+
+function summarizeStatus(response: IDataObject): IDataObject {
+	const print = ((response.print as IDataObject | undefined) ?? response) as IDataObject;
+	const tray = (print.vt_tray as IDataObject | undefined) ?? {};
+	const online = (print.online as IDataObject | undefined) ?? {};
+	const lights = Array.isArray(print.lights_report) ? (print.lights_report as IDataObject[]) : [];
+	const net = (print.net as IDataObject | undefined) ?? {};
+	const netInfo = Array.isArray(net.info) ? (net.info as IDataObject[]) : [];
+	const primaryNetInfo = netInfo[0] ?? {};
+
+	return {
+		state: print.gcode_state ?? 'unknown',
+		print_type: print.print_type ?? 'unknown',
+		stage: print.mc_print_stage ?? null,
+		progress_pct: Number(print.mc_percent ?? 0),
+		remaining_min: Number(print.mc_remaining_time ?? 0),
+		current_layer: Number(print.layer_num ?? 0),
+		total_layers: Number(print.total_layer_num ?? 0),
+		task_name: print.subtask_name ?? '',
+		project_id: print.project_id ?? '',
+		profile_id: print.profile_id ?? '',
+		task_id: print.task_id ?? '',
+		subtask_id: print.subtask_id ?? '',
+		wifi_signal: print.wifi_signal ?? '',
+		local_ip: decodePackedIpv4(primaryNetInfo.ip),
+		nozzle_temp_c: Number(print.nozzle_temper ?? 0),
+		nozzle_target_c: Number(print.nozzle_target_temper ?? 0),
+		bed_temp_c: Number(print.bed_temper ?? 0),
+		bed_target_c: Number(print.bed_target_temper ?? 0),
+		chamber_temp_c: Number(print.chamber_temper ?? 0),
+		heatbreak_fan_speed: Number(print.heatbreak_fan_speed ?? 0),
+		cooling_fan_speed: Number(print.cooling_fan_speed ?? 0),
+		aux_fan1_speed: Number(print.big_fan1_speed ?? 0),
+		aux_fan2_speed: Number(print.big_fan2_speed ?? 0),
+		speed_level: Number(print.spd_lvl ?? 0),
+		speed_percent: Number(print.spd_mag ?? 0),
+		error_code: Number(print.print_error ?? 0),
+		chamber_light: lights.find((light) => light.node === 'chamber_light')?.mode ?? '',
+		ams_status: Number(print.ams_status ?? 0),
+		active_tray_id: tray.id ?? '',
+		tray_type: tray.tray_type ?? '',
+		tray_material: tray.tray_info_idx ?? '',
+		tray_color: tray.tray_color ?? '',
+		tray_k: tray.k ?? null,
+		nozzle_diameter: print.nozzle_diameter ?? '',
+		nozzle_type: print.nozzle_type ?? '',
+		sdcard_mounted: Boolean(print.sdcard),
+		printer_online: Boolean(online.version || online.ahb || online.rfid),
+	};
+}
+
+function commandForOperation(
+	operation: string,
+	rawCommand: string | object | undefined,
+	node: INode,
+): object {
+	if (operation === 'getStatus') {
+		return PUSH_ALL;
+	}
+
+	if (operation === 'sendCommand') {
+		if (rawCommand === undefined) {
+			throw new NodeOperationError(node, 'Command is required for the Send Command operation');
+		}
+
+		return typeof rawCommand === 'string' ? (JSON.parse(rawCommand) as object) : rawCommand;
+	}
+
+	if (operation === 'pausePrint') return PRINT_COMMANDS.pause;
+	if (operation === 'resumePrint') return PRINT_COMMANDS.resume;
+	if (operation === 'cancelPrint') return PRINT_COMMANDS.cancel;
+
+	throw new NodeOperationError(node, `Unknown operation: ${operation}`);
+}
 
 export class BambuLab implements INodeType {
 	description: INodeTypeDescription = {
@@ -43,6 +132,24 @@ export class BambuLab implements INodeType {
 						action: 'Get printer status',
 					},
 					{
+						name: 'Pause Print',
+						value: 'pausePrint',
+						description: 'Pause the currently running print',
+						action: 'Pause the current print',
+					},
+					{
+						name: 'Resume Print',
+						value: 'resumePrint',
+						description: 'Resume a paused print',
+						action: 'Resume the current print',
+					},
+					{
+						name: 'Cancel Print',
+						value: 'cancelPrint',
+						description: 'Stop the current print',
+						action: 'Cancel the current print',
+					},
+					{
 						name: 'Send Command',
 						value: 'sendCommand',
 						description:
@@ -51,6 +158,25 @@ export class BambuLab implements INodeType {
 					},
 				],
 				default: 'getStatus',
+			},
+			{
+				displayName: 'Response Mode',
+				name: 'responseMode',
+				type: 'options',
+				options: [
+					{
+						name: 'Summary',
+						value: 'summary',
+						description: 'Return a normalized printer status summary',
+					},
+					{
+						name: 'Raw',
+						value: 'raw',
+						description: 'Return the raw MQTT response from the printer',
+					},
+				],
+				default: 'summary',
+				description: 'Whether to return the raw printer response or a normalized summary',
 			},
 			{
 				displayName: 'Command (JSON)',
@@ -82,6 +208,7 @@ export class BambuLab implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			const operation = this.getNodeParameter('operation', i) as string;
+			const responseMode = this.getNodeParameter('responseMode', i) as string;
 			const timeoutMs = this.getNodeParameter('timeoutMs', i) as number;
 			const rawCredentials = await this.getCredentials('bambuLabLanApi');
 
@@ -92,20 +219,19 @@ export class BambuLab implements INodeType {
 			};
 
 			try {
-				let command: object;
-
-				if (operation === 'getStatus') {
-					command = PUSH_ALL;
-				} else if (operation === 'sendCommand') {
-					const raw = this.getNodeParameter('command', i) as string | object;
-					command = typeof raw === 'string' ? (JSON.parse(raw) as object) : raw;
-				} else {
-					throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`);
-				}
-
+				const rawCommand =
+					operation === 'sendCommand'
+						? (this.getNodeParameter('command', i) as string | object)
+						: undefined;
+				const command = commandForOperation(operation, rawCommand, this.getNode());
 				const response = await mqttRequest(credentials, command, timeoutMs);
+				const output =
+					responseMode === 'raw'
+						? (response as IDataObject)
+						: summarizeStatus(response as IDataObject);
+
 				returnData.push({
-					json: response as IDataObject,
+					json: output,
 					pairedItem: { item: i },
 				});
 			} catch (error) {
