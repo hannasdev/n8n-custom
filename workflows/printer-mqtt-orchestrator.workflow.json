@@ -1,0 +1,281 @@
+{
+  "id": "printer-mqtt-orchestrator",
+  "name": "Printer MQTT Orchestrator",
+  "active": false,
+  "settings": {},
+  "nodes": [
+    {
+      "id": "1",
+      "name": "MQTT Trigger",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "topic": "n8n/p1s/events",
+        "options": {
+          "qos": 1
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Attach MQTT credentials after import. Topic defaults to n8n/p1s/events."
+    },
+    {
+      "id": "2",
+      "name": "Normalize Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function nullify(v) {\n  if (v === undefined || v === null) return null;\n  if (typeof v === 'string' && ['unknown', 'unavailable', 'none', 'null', ''].includes(v.toLowerCase())) return null;\n  return v;\n}\n\nconst input = $json;\nconst eventId = input.event_id ?? `${Date.now()}-${input.entity_id ?? 'printer'}`;\nconst timestamp = input.timestamp ?? new Date().toISOString();\n\nconst fromState = nullify(input?.transition?.from ?? input.old_state);\nconst toState = nullify(input?.transition?.to ?? input.new_state);\nconst inferredType = input.inferred_event_type ?? input.event_type ?? 'status_changed';\n\nreturn {\n  event_id: eventId,\n  event_ts: timestamp,\n  schema_version: input.schema_version ?? '1.0.0',\n  source: input.source ?? 'home_assistant',\n  printer_id: input.printer_id ?? 'p1s_01',\n  entity_id: input.entity_id ?? null,\n  event_type: inferredType,\n  transition_from: fromState,\n  transition_to: toState,\n  status: nullify(input?.snapshot?.status),\n  stage: nullify(input?.snapshot?.stage),\n  task_name: nullify(input?.snapshot?.task_name),\n  progress_pct: Number(input?.snapshot?.progress ?? 0),\n  remaining_time_min: Math.round(Number(input?.snapshot?.remaining_time_h ?? 0) * 60),\n  nozzle_temp: Number(input?.snapshot?.temps?.nozzle ?? 0),\n  bed_temp: Number(input?.snapshot?.temps?.bed ?? 0),\n  filament_loaded: input?.snapshot?.filament_loaded ?? null,\n  online: input?.snapshot?.online ?? null,\n  raw_payload: input\n};"
+      }
+    },
+    {
+      "id": "3",
+      "name": "If Print Completed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        760,
+        220
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "print_completed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Lamp Green",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1020,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://homeassistant.local:8123/api/services/light/turn_on",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_HA_LONG_LIVED_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"entity_id\":\"light.printer_lamp\",\"color_name\":\"green\",\"brightness_pct\":100}"
+      },
+      "notesInFlow": true,
+      "notes": "Replace URL, token, and light entity_id."
+    },
+    {
+      "id": "5",
+      "name": "Wait 5 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        120
+      ],
+      "parameters": {
+        "amount": 5,
+        "unit": "minutes"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Lamp Neutral",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://homeassistant.local:8123/api/services/light/turn_on",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_HA_LONG_LIVED_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"entity_id\":\"light.printer_lamp\",\"color_temp_kelvin\":3000,\"brightness_pct\":60}"
+      }
+    },
+    {
+      "id": "7",
+      "name": "If Print Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "print_failed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Lamp Red",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1260,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://homeassistant.local:8123/api/services/light/turn_on",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REPLACE_WITH_HA_LONG_LIVED_TOKEN"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"entity_id\":\"light.printer_lamp\",\"color_name\":\"red\",\"brightness_pct\":100}"
+      }
+    },
+    {
+      "id": "9",
+      "name": "No-Op",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        520
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Event": {
+      "main": [
+        [
+          {
+            "node": "If Print Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Print Completed": {
+      "main": [
+        [
+          {
+            "node": "Lamp Green",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Print Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lamp Green": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Lamp Neutral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Print Failed": {
+      "main": [
+        [
+          {
+            "node": "Lamp Red",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No-Op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

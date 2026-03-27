@@ -1,0 +1,304 @@
+{
+  "id": "printer-statistics",
+  "name": "Printer Statistics",
+  "active": false,
+  "settings": {},
+  "nodes": [
+    {
+      "id": "1",
+      "name": "MQTT Trigger Stats",
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        220
+      ],
+      "parameters": {
+        "topic": "n8n/p1s/events",
+        "options": {
+          "qos": 1
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Use the same MQTT credentials as your orchestrator workflow."
+    },
+    {
+      "id": "2",
+      "name": "Normalize Stats Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function parseMessage(input) {\n  if (typeof input?.message === 'string') {\n    try {\n      return JSON.parse(input.message);\n    } catch (error) {\n      return input;\n    }\n  }\n\n  if (input?.message && typeof input.message === 'object') {\n    return input.message;\n  }\n\n  return input;\n}\n\nfunction toIso(value) {\n  if (!value) return new Date().toISOString();\n  if (typeof value === 'number') {\n    const millis = value > 1e12 ? value : value * 1000;\n    return new Date(millis).toISOString();\n  }\n\n  const parsed = Date.parse(value);\n  return Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString();\n}\n\nfunction dayKey(isoString) {\n  const date = new Date(isoString);\n  const year = date.getFullYear();\n  const month = String(date.getMonth() + 1).padStart(2, '0');\n  const day = String(date.getDate()).padStart(2, '0');\n  return year + '-' + month + '-' + day;\n}\n\nconst raw = parseMessage($json);\nconst eventTs = toIso(raw.timestamp ?? raw.event_ts);\n\nreturn {\n  event_ts: eventTs,\n  day: dayKey(eventTs),\n  printer_id: raw.printer_id ?? 'p1s_01',\n  event_type: raw.inferred_event_type ?? raw.event_type ?? 'status_changed',\n  transition_from: raw.old_state ?? '',\n  transition_to: raw.new_state ?? '',\n  progress_pct: Number(raw?.snapshot?.progress ?? 0),\n  duration_sec: Number(raw.duration_sec ?? raw?.snapshot?.duration_sec ?? raw?.snapshot?.elapsed_time_s ?? 0),\n  job_id: raw.job_id ?? raw?.snapshot?.job_id ?? raw?.snapshot?.task_name ?? raw.task_name ?? raw.event_id ?? '',\n  raw_payload: JSON.stringify(raw)\n};"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Insert Event Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        220
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "mode": "name",
+          "value": "printer_events"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null
+        },
+        "options": {}
+      },
+      "notesInFlow": true,
+      "notes": "Requires a Data Table named printer_events with columns: event_ts(date), day(string), printer_id(string), event_type(string), transition_from(string), transition_to(string), progress_pct(number), duration_sec(number), job_id(string), raw_payload(string)."
+    },
+    {
+      "id": "4",
+      "name": "Event Stats Updated",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        940,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5",
+      "name": "Daily Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        220,
+        520
+      ],
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 23,
+              "minute": 59
+            }
+          ]
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Runs once per day and computes a daily snapshot from persisted event rows."
+    },
+    {
+      "id": "6",
+      "name": "Prepare Snapshot Day",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function dayKey(date = new Date()) {\n  const year = date.getFullYear();\n  const month = String(date.getMonth() + 1).padStart(2, '0');\n  const day = String(date.getDate()).padStart(2, '0');\n  return `${year}-${month}-${day}`;\n}\n\nreturn [{\n  json: {\n    day: dayKey()\n  }\n}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Fetch Today's Events",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        520
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "mode": "name",
+          "value": "printer_events"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "day",
+              "condition": "eq",
+              "keyValue": "={{$json.day}}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "event_ts",
+        "orderByDirection": "ASC"
+      },
+      "notesInFlow": true,
+      "notes": "Reads all event rows for the current day from the printer_events Data Table."
+    },
+    {
+      "id": "8",
+      "name": "Build Daily Snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function toMillis(value) {\n  if (!value) return Date.now();\n  if (typeof value === 'number') return value > 1e12 ? value : value * 1000;\n  const parsed = Date.parse(value);\n  return Number.isNaN(parsed) ? Date.now() : parsed;\n}\n\nconst rows = $input.all()\n  .map((item) => item.json)\n  .sort((left, right) => toMillis(left.event_ts) - toMillis(right.event_ts));\n\nif (rows.length === 0) {\n  return [];\n}\n\nconst aggregates = new Map();\nconst activeStarts = new Map();\nconst snapshotTs = new Date().toISOString();\n\nfor (const row of rows) {\n  const printerId = row.printer_id ?? 'unknown';\n\n  if (!aggregates.has(printerId)) {\n    aggregates.set(printerId, {\n      snapshot_ts: snapshotTs,\n      day: row.day,\n      printer_id: printerId,\n      events: 0,\n      started: 0,\n      completed: 0,\n      failed: 0,\n      total_duration_sec: 0,\n      active_jobs: 0\n    });\n  }\n\n  const stats = aggregates.get(printerId);\n  const eventTs = toMillis(row.event_ts);\n  stats.events += 1;\n\n  if (row.event_type === 'print_started') {\n    stats.started += 1;\n    activeStarts.set(printerId, eventTs);\n    continue;\n  }\n\n  if (row.event_type === 'print_completed') {\n    stats.completed += 1;\n    if (activeStarts.has(printerId)) {\n      const startedAt = activeStarts.get(printerId);\n      stats.total_duration_sec += Math.max(0, Math.round((eventTs - startedAt) / 1000));\n      activeStarts.delete(printerId);\n    }\n    continue;\n  }\n\n  if (row.event_type === 'print_failed') {\n    stats.failed += 1;\n    activeStarts.delete(printerId);\n  }\n}\n\nreturn Array.from(aggregates.values()).map((stats) => {\n  const completionBase = stats.completed + stats.failed;\n  const failureRate = completionBase > 0 ? Number((stats.failed / completionBase).toFixed(4)) : 0;\n  const avgDurationSec = stats.completed > 0 ? Math.round(stats.total_duration_sec / stats.completed) : 0;\n\n  return {\n    json: {\n      ...stats,\n      failure_rate: failureRate,\n      avg_duration_sec: avgDurationSec,\n      active_jobs: activeStarts.has(stats.printer_id) ? 1 : 0\n    }\n  };\n});"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Upsert Daily Snapshot",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1180,
+        520
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "mode": "name",
+          "value": "printer_daily_stats"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "day",
+              "condition": "eq",
+              "keyValue": "={{$json.day}}"
+            },
+            {
+              "keyName": "printer_id",
+              "condition": "eq",
+              "keyValue": "={{$json.printer_id}}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null
+        },
+        "options": {}
+      },
+      "notesInFlow": true,
+      "notes": "Requires a Data Table named printer_daily_stats with columns: snapshot_ts(date), day(string), printer_id(string), events(number), started(number), completed(number), failed(number), failure_rate(number), avg_duration_sec(number), total_duration_sec(number), active_jobs(number)."
+    },
+    {
+      "id": "10",
+      "name": "Daily Snapshot Ready",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        520
+      ],
+      "parameters": {},
+      "notesInFlow": true,
+      "notes": "The snapshot row is now stored in printer_daily_stats and can be charted directly from n8n Data Tables."
+    }
+  ],
+  "connections": {
+    "MQTT Trigger Stats": {
+      "main": [
+        [
+          {
+            "node": "Normalize Stats Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Stats Event": {
+      "main": [
+        [
+          {
+            "node": "Insert Event Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Event Row": {
+      "main": [
+        [
+          {
+            "node": "Event Stats Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Cron": {
+      "main": [
+        [
+          {
+            "node": "Prepare Snapshot Day",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Snapshot Day": {
+      "main": [
+        [
+          {
+            "node": "Fetch Today's Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Today's Events": {
+      "main": [
+        [
+          {
+            "node": "Build Daily Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Daily Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Upsert Daily Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Daily Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Daily Snapshot Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
