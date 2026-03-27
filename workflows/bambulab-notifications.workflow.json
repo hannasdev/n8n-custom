@@ -113,13 +113,23 @@
 		},
 		{
 			"id": "n6",
-			"name": "Send Notification",
-			"type": "n8n-nodes-base.noOp",
-			"typeVersion": 1,
+			"name": "Send Telegram Message",
+			"type": "n8n-nodes-base.telegram",
+			"typeVersion": 1.2,
 			"position": [1020, 320],
-			"parameters": {},
+			"parameters": {
+				"resource": "message",
+				"operation": "sendMessage",
+				"chatId": "",
+				"text": "=<b>{{ $json.subject }}</b>\n\n{{ $json.message }}",
+				"additionalFields": {
+					"parse_mode": "HTML",
+					"disable_notification": false
+				}
+			},
+			"credentials": {},
 			"notesInFlow": true,
-			"notes": "Replace this node with Slack / Gmail / HTTP Request / Telegram etc.\nBoth message paths merge here — $json.subject and $json.message are ready to use."
+			"notes": "1. Create a Telegram credential with your Bot Token\n2. Set Chat ID to your personal chat ID\n   (visit api.telegram.org/bot<TOKEN>/getUpdates after messaging the bot)"
 		},
 		{
 			"id": "n7",
@@ -128,7 +138,7 @@
 			"typeVersion": 1,
 			"position": [220, 160],
 			"parameters": {
-				"content": "## Bambu Lab Printer Notifications\n\nThis workflow reacts in real time to printer state changes.\n\n**Setup:**\n1. Assign the **Bambu Lab Local** credential to the trigger node\n2. Replace **Send Notification** with your preferred channel (Slack, Gmail, HTTP Request, etc.)\n3. Activate the workflow\n\n**What fires:**\n- **Print Complete** — state transitions to `FINISH`\n- **Error Alert** — `error_code` becomes non-zero\n\nAll other state changes are ignored.",
+				"content": "## Bambu Lab Printer Notifications\n\nThis workflow reacts in real time to printer state changes.\n\n**Setup:**\n1. Assign the **Bambu Lab Local** credential to the trigger node\n2. Add a **Telegram** credential (Bot Token) to the Send Telegram Message node and set your Chat ID\n3. Activate the workflow\n\n**What fires:**\n- **Print Complete** — state transitions to `FINISH`\n- **Error Alert** — `error_code` becomes non-zero\n\nAll other state changes are ignored.",
 				"height": 260,
 				"width": 860,
 				"color": 7
@@ -151,10 +161,10 @@
 			"main": [[{ "node": "Compose: Error Alert", "type": "main", "index": 0 }], []]
 		},
 		"Compose: Print Complete": {
-			"main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]]
+			"main": [[{ "node": "Send Telegram Message", "type": "main", "index": 0 }]]
 		},
 		"Compose: Error Alert": {
-			"main": [[{ "node": "Send Notification", "type": "main", "index": 0 }]]
+			"main": [[{ "node": "Send Telegram Message", "type": "main", "index": 0 }]]
 		}
 	}
 }
