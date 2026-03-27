@@ -23,6 +23,48 @@ npm run dev
 
 This starts n8n with your nodes loaded and hot reload enabled.
 
+## Docker Compose Development (Custom Node)
+
+If you prefer running n8n in Docker, you can use [docker-compose.yml](docker-compose.yml) in this repository.
+
+### 1. Build your node package first
+
+```bash
+npm run build
+```
+
+This creates the `dist/` output that n8n loads from your package definition.
+
+### 2. Start n8n with Docker Compose
+
+```bash
+docker compose up -d
+```
+
+This starts n8n on http://localhost:5678 and loads custom nodes from this repository through `N8N_CUSTOM_EXTENSIONS`.
+
+### 3. Confirm n8n started cleanly
+
+```bash
+docker compose logs -f n8n
+```
+
+Then open the editor and verify the **Example** and **Github Issues** nodes appear.
+
+### 4. Development loop
+
+Keep Docker running and rebuild locally when files change:
+
+```bash
+npm run build:watch
+```
+
+If metadata changes don't appear immediately, restart n8n:
+
+```bash
+docker compose restart n8n
+```
+
 ## What's Included
 
 This starter repository includes two example nodes to learn from:
