@@ -39,7 +39,8 @@
 		"nodes": [
 			"dist/nodes/GithubIssues/GithubIssues.node.js",
 			"dist/nodes/Example/Example.node.js",
-			"dist/nodes/BambuLab/BambuLab.node.js"
+			"dist/nodes/BambuLab/BambuLab.node.js",
+			"dist/nodes/BambuLab/BambuLabTrigger.node.js"
 		]
 	},
 	"dependencies": {
