@@ -230,6 +230,19 @@ export class BambuLab implements INodeType {
 				description: 'Whether to return the raw printer response or a normalized summary',
 			},
 			{
+				displayName: 'Include Raw Payload in Summary',
+				name: 'includeRawPayload',
+				type: 'boolean',
+				default: false,
+				description:
+					'Whether to include the full raw printer payload in summary mode for debugging and field discovery',
+				displayOptions: {
+					show: {
+						responseMode: ['summary'],
+					},
+				},
+			},
+			{
 				displayName: 'Command (JSON)',
 				name: 'command',
 				type: 'json',
@@ -260,6 +273,7 @@ export class BambuLab implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			const operation = this.getNodeParameter('operation', i) as string;
 			const responseMode = this.getNodeParameter('responseMode', i) as string;
+			const includeRawPayload = this.getNodeParameter('includeRawPayload', i) as boolean;
 			const timeoutMs = this.getNodeParameter('timeoutMs', i) as number;
 			const rawCredentials = await this.getCredentials('bambuLabLanApi');
 
@@ -282,6 +296,14 @@ export class BambuLab implements INodeType {
 						: operation === 'getStatus'
 							? summarizeStatus(response as IDataObject)
 							: summarizeCommandResult(operation, response as IDataObject, rawCommand);
+
+				if (responseMode === 'summary' && includeRawPayload) {
+					if (operation === 'getStatus') {
+						(output as IDataObject).raw_payload = response as IDataObject;
+					} else {
+						(output as IDataObject).raw_response = response as IDataObject;
+					}
+				}
 
 				returnData.push({
 					json: output,
