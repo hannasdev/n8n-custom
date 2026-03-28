@@ -3,7 +3,13 @@ import type { ICredentialType, INodeProperties } from 'n8n-workflow';
 export class BambuLabLanApi implements ICredentialType {
 	name = 'bambuLabLanApi';
 
-	displayName = 'Bambu Lab (Local Network)';
+	displayName = 'Bambu Lab (Local Network) API';
+
+	documentationUrl = 'https://github.com/hannasdev/n8n-nodes-bambulab';
+
+	icon = 'file:bambulab.svg' as const;
+
+	testedBy = 'bambuLab';
 
 	properties: INodeProperties[] = [
 		{

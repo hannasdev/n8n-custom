@@ -1,4 +1,7 @@
 import type {
+	INodeCredentialTestResult,
+	ICredentialTestFunctions,
+	ICredentialsDecrypted,
 	IDataObject,
 	IExecuteFunctions,
 	INodeExecutionData,
@@ -6,7 +9,12 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionTypes } from 'n8n-workflow';
-import { mqttRequest, PUSH_ALL, type BambuLanCredentials } from './shared/mqttClient';
+import {
+	mqttRequest,
+	PUSH_ALL,
+	type BambuLanCredentials,
+	testMqttConnection,
+} from './shared/mqttClient';
 
 function decodePackedIpv4(value: unknown): string {
 	if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -74,9 +82,10 @@ export class BambuLab implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Bambu Lab Printer',
 		name: 'bambuLab',
-		icon: 'fa:cube',
+		icon: 'file:bambulab.svg',
 		group: ['output'],
 		version: 1,
+		usableAsTool: true,
 		subtitle: 'get status',
 		description: 'Interact with a Bambu Lab printer over the local network via MQTT',
 		defaults: {
@@ -88,6 +97,7 @@ export class BambuLab implements INodeType {
 			{
 				name: 'bambuLabLanApi',
 				required: true,
+				testedBy: 'bambuLab',
 			},
 		],
 		properties: [
@@ -124,7 +134,7 @@ export class BambuLab implements INodeType {
 				},
 			},
 			{
-				displayName: 'Timeout (ms)',
+				displayName: 'Timeout (Ms)',
 				name: 'timeoutMs',
 				type: 'number',
 				default: 10000,
@@ -177,5 +187,18 @@ export class BambuLab implements INodeType {
 		}
 
 		return [returnData];
+	}
+
+	async credentialTest(
+		this: ICredentialTestFunctions,
+		credential: ICredentialsDecrypted,
+	): Promise<INodeCredentialTestResult> {
+		const credentials = credential.data as unknown as BambuLanCredentials;
+		try {
+			await testMqttConnection(credentials);
+			return { status: 'OK', message: 'Connected to printer successfully' };
+		} catch (error) {
+			return { status: 'Error', message: (error as Error).message };
+		}
 	}
 }

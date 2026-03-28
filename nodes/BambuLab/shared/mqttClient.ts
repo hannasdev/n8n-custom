@@ -1,3 +1,4 @@
+// eslint-disable-next-line import-x/named
 import { connect, type MqttClient } from 'mqtt';
 
 const REPORT_TOPIC = (serial: string) => `device/${serial}/report`;
@@ -83,6 +84,42 @@ export async function mqttRequest(
 
 		client.once('error', (err) => {
 			settle(() => reject(err));
+		});
+	});
+}
+
+/**
+ * Attempts a TLS connection to the printer MQTT broker and resolves if the
+ * connack is received. Used for credential testing.
+ */
+export async function testMqttConnection(credentials: BambuLanCredentials): Promise<void> {
+	const { host, accessCode } = credentials;
+
+	return new Promise((resolve, reject) => {
+		const client: MqttClient = connect(`mqtts://${host}:8883`, {
+			username: 'bblp',
+			password: accessCode,
+			clientId: `n8n-bambulab-test-${Date.now()}`,
+			clean: true,
+			connectTimeout: 8_000,
+			rejectUnauthorized: false,
+		});
+
+		const timer = setTimeout(() => {
+			client.end(true);
+			reject(new Error('Connection timed out — check printer IP and access code'));
+		}, 10_000);
+
+		client.once('connect', () => {
+			clearTimeout(timer);
+			client.end(true);
+			resolve();
+		});
+
+		client.once('error', (err) => {
+			clearTimeout(timer);
+			client.end(true);
+			reject(err);
 		});
 	});
 }

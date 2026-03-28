@@ -6,6 +6,7 @@ import type {
 	ITriggerResponse,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+// eslint-disable-next-line import-x/named
 import { connect, type MqttClient } from 'mqtt';
 import { type BambuLanCredentials, PUSH_ALL } from './shared/mqttClient';
 
@@ -70,16 +71,17 @@ export class BambuLabTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Bambu Lab Printer Trigger',
 		name: 'bambuLabTrigger',
-		icon: 'fa:cube',
+		icon: 'file:bambulab.svg',
 		group: ['trigger'],
 		version: 1,
+		usableAsTool: true,
 		subtitle: 'printer event',
 		description:
 			'Polls a Bambu Lab printer via local MQTT and emits an event whenever the printer status changes',
 		defaults: { name: 'Bambu Lab Printer Trigger' },
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
-		credentials: [{ name: 'bambuLabLanApi', required: true }],
+		credentials: [{ name: 'bambuLabLanApi', required: true, testedBy: 'bambuLab' }],
 		triggerPanel: {
 			header: '',
 			executionsHelp: {
@@ -93,7 +95,7 @@ export class BambuLabTrigger implements INodeType {
 		},
 		properties: [
 			{
-				displayName: 'Poll Interval (seconds)',
+				displayName: 'Poll Interval (Seconds)',
 				name: 'pollInterval',
 				type: 'number',
 				default: 30,
