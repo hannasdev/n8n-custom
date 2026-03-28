@@ -179,6 +179,8 @@ export class BambuLabTrigger implements INodeType {
 						(output as IDataObject).state ??
 						'',
 				);
+				// Skip frames that carry no meaningful state (partial updates, acks, etc.)
+				if (!currentState) return;
 				if (currentState === staticData.lastState) return;
 				staticData.lastState = currentState;
 			}
