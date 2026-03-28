@@ -1,0 +1,86 @@
+# Automatically creates a release when a PR is merged to master.
+#
+# Version increment is inferred from conventional commit messages since the last tag:
+#   - "BREAKING CHANGE" or "!:" anywhere → major
+#   - "feat:" prefix → minor
+#   - Everything else → patch
+#
+# ─── PREREQUISITES ─────────────────────────────────────────────────────────────
+#
+# A Personal Access Token (classic) with `repo` scope is required so that
+# release-it can push the version bump commit and tag back to the protected
+# master branch.
+#
+# 1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+#    Generate a token with the `repo` scope. Set expiration as appropriate.
+# 2. Repo → Settings → Secrets and variables → Actions → New repository secret
+#    Name: RELEASE_TOKEN   Value: <the token>
+#
+# ─── LOOP PREVENTION ───────────────────────────────────────────────────────────
+#
+# The workflow skips any push whose HEAD commit message starts with "Release "
+# (the format used by release-it), so the version bump commit does not
+# trigger another release.
+
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+# Only one release at a time; never cancel an in-progress release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Auto-release on merge
+    runs-on: ubuntu-latest
+
+    # Skip release commits produced by this workflow itself.
+    if: "!startsWith(github.event.head_commit.message, 'Release ')"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use PAT so the push of the version bump commit is allowed on the
+          # protected master branch.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version increment
+        id: increment
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s %b")
+          else
+            COMMITS=$(git log --pretty=format:"%s %b" "${LAST_TAG}..HEAD")
+          fi
+
+          if echo "$COMMITS" | grep -qiE "(BREAKING CHANGE|!:)"; then
+            echo "increment=major" >> "$GITHUB_OUTPUT"
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?[!]?:"; then
+            echo "increment=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "increment=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run release-it
+        run: npx release-it --ci --increment=${{ steps.increment.outputs.increment }}
