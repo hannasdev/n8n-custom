@@ -113,7 +113,7 @@ export class BambuLabTrigger implements INodeType {
 				displayName: 'Fire Only on State Change',
 				name: 'stateChangeOnly',
 				type: 'boolean',
-				default: false,
+				default: true,
 				description:
 					'Whether to emit an event only when the printer state (e.g. RUNNING → FINISH) changes between polls',
 			},
@@ -173,14 +173,11 @@ export class BambuLabTrigger implements INodeType {
 			const output = responseMode === 'raw' ? parsed : summarizeStatus(parsed);
 
 			if (stateChangeOnly) {
-				const currentState = String(
-					(parsed.print as IDataObject | undefined)?.gcode_state ??
-						parsed.gcode_state ??
-						(output as IDataObject).state ??
-						'',
-				);
-				// Skip frames that carry no meaningful state (partial updates, acks, etc.)
-				if (!currentState) return;
+				const rawState =
+					(parsed.print as IDataObject | undefined)?.gcode_state ?? parsed.gcode_state;
+				// Skip partial frames that don't carry gcode_state at all
+				if (rawState === undefined || rawState === null || rawState === '') return;
+				const currentState = String(rawState);
 				if (currentState === staticData.lastState) return;
 				staticData.lastState = currentState;
 			}
