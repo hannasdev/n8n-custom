@@ -139,7 +139,9 @@ export class BambuLabTrigger implements INodeType {
 		const reportTopic = REPORT_TOPIC(credentials.serial);
 		const requestTopic = REQUEST_TOPIC(credentials.serial);
 
-		let lastState: string | undefined;
+		// Persist lastState across restarts so publish/restart doesn't re-fire stale states
+		const staticData = this.getWorkflowStaticData('node') as { lastState?: string };
+
 		let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 		const createMqttClient = (): Promise<MqttClient> =>
@@ -177,8 +179,8 @@ export class BambuLabTrigger implements INodeType {
 						(output as IDataObject).state ??
 						'',
 				);
-				if (currentState === lastState) return;
-				lastState = currentState;
+				if (currentState === staticData.lastState) return;
+				staticData.lastState = currentState;
 			}
 
 			this.emit([this.helpers.returnJsonArray([output])]);
