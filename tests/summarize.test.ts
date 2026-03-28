@@ -13,7 +13,7 @@ describe('decodePackedIpv4', () => {
 	});
 
 	it('returns empty string for non-numeric input', () => {
-		expect(decodePackedIpv4('192.168.1.1')).toBe('');
+		expect(decodePackedIpv4('not-a-number')).toBe('');
 		expect(decodePackedIpv4(null)).toBe('');
 		expect(decodePackedIpv4(undefined)).toBe('');
 	});

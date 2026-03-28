@@ -24,6 +24,8 @@
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"check:n8n-version": "echo Running: && docker compose exec n8n n8n --version && echo Latest: && npm view n8n version",
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
@@ -50,7 +52,8 @@
 		"eslint": "9.39.4",
 		"prettier": "3.8.1",
 		"release-it": "19.2.4",
-		"typescript": "5.9.3"
+		"typescript": "5.9.3",
+		"vitest": "^4.1.2"
 	},
 	"peerDependencies": {
 		"n8n-workflow": "*"
