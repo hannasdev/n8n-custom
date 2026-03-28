@@ -14,7 +14,7 @@ Bambu Lab is a 3D printer platform. This package communicates with the printer d
 
 ## Installation
 
-Follow the [n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) and search for `n8n-nodes-bambulab`.
+Follow the [n8n community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) and search for `@hanna84/n8n-nodes-bambulab`.
 
 For local development with the included Docker setup:
 

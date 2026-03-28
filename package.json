@@ -1,5 +1,5 @@
 {
-	"name": "n8n-nodes-bambulab",
+	"name": "@hanna84/n8n-nodes-bambulab",
 	"version": "1.0.0",
 	"description": "n8n community node for controlling and monitoring Bambu Lab 3D printers over the local network via MQTT",
 	"license": "MIT",
@@ -14,6 +14,9 @@
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/hannasdev/n8n-nodes-bambulab.git"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"build": "n8n-node build",
