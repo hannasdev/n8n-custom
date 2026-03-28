@@ -15,68 +15,7 @@ import {
 	type BambuLanCredentials,
 	testMqttConnection,
 } from './shared/mqttClient';
-
-function decodePackedIpv4(value: unknown): string {
-	if (typeof value !== 'number' || !Number.isFinite(value)) {
-		return '';
-	}
-
-	return [0, 8, 16, 24].map((shift) => String((value >> shift) & 255)).join('.');
-}
-
-function summarizeStatus(response: IDataObject): IDataObject {
-	const print = ((response.print as IDataObject | undefined) ?? response) as IDataObject;
-	const tray = (print.vt_tray as IDataObject | undefined) ?? {};
-	const online = (print.online as IDataObject | undefined) ?? {};
-	const lights = Array.isArray(print.lights_report) ? (print.lights_report as IDataObject[]) : [];
-	const net = (print.net as IDataObject | undefined) ?? {};
-	const netInfo = Array.isArray(net.info) ? (net.info as IDataObject[]) : [];
-	const primaryNetInfo = netInfo[0] ?? {};
-
-	return {
-		state: print.gcode_state ?? print.state ?? 'unknown',
-		print_type: print.print_type ?? 'unknown',
-		stage: print.mc_print_stage ?? print.stage ?? null,
-		progress_pct: Number(print.mc_percent ?? print.progress_pct ?? 0),
-		remaining_min: Number(print.mc_remaining_time ?? print.remaining_min ?? 0),
-		current_layer: Number(print.layer_num ?? print.current_layer ?? 0),
-		total_layers: Number(print.total_layer_num ?? print.total_layers ?? 0),
-		task_name: print.subtask_name ?? print.task_name ?? '',
-		project_id: print.project_id ?? '',
-		profile_id: print.profile_id ?? '',
-		task_id: print.task_id ?? '',
-		subtask_id: print.subtask_id ?? '',
-		wifi_signal: print.wifi_signal ?? '',
-		local_ip: decodePackedIpv4(primaryNetInfo.ip) || String(print.local_ip ?? ''),
-		nozzle_temp_c: Number(print.nozzle_temper ?? print.nozzle_temp_c ?? 0),
-		nozzle_target_c: Number(print.nozzle_target_temper ?? print.nozzle_target_c ?? 0),
-		bed_temp_c: Number(print.bed_temper ?? print.bed_temp_c ?? 0),
-		bed_target_c: Number(print.bed_target_temper ?? print.bed_target_c ?? 0),
-		chamber_temp_c: Number(print.chamber_temper ?? print.chamber_temp_c ?? 0),
-		heatbreak_fan_speed: Number(print.heatbreak_fan_speed ?? 0),
-		cooling_fan_speed: Number(print.cooling_fan_speed ?? 0),
-		aux_fan1_speed: Number(print.big_fan1_speed ?? print.aux_fan1_speed ?? 0),
-		aux_fan2_speed: Number(print.big_fan2_speed ?? print.aux_fan2_speed ?? 0),
-		speed_level: Number(print.spd_lvl ?? print.speed_level ?? 0),
-		speed_percent: Number(print.spd_mag ?? print.speed_percent ?? 0),
-		error_code: Number(print.print_error ?? print.error_code ?? 0),
-		chamber_light: lights.find((light) => light.node === 'chamber_light')?.mode ?? '',
-		ams_status: Number(print.ams_status ?? 0),
-		active_tray_id: tray.id ?? print.active_tray_id ?? '',
-		tray_type: tray.tray_type ?? print.tray_type ?? '',
-		tray_material: tray.tray_info_idx ?? print.tray_material ?? '',
-		tray_color: tray.tray_color ?? print.tray_color ?? '',
-		tray_k: tray.k ?? print.tray_k ?? null,
-		nozzle_diameter: print.nozzle_diameter ?? '',
-		nozzle_type: print.nozzle_type ?? '',
-		sdcard_mounted:
-			print.sdcard_mounted !== undefined ? Boolean(print.sdcard_mounted) : Boolean(print.sdcard),
-		printer_online:
-			print.printer_online !== undefined
-				? Boolean(print.printer_online)
-				: Boolean(online.version || online.ahb || online.rfid),
-	};
-}
+import { summarizeStatus } from './shared/summarize';
 
 export class BambuLab implements INodeType {
 	description: INodeTypeDescription = {
