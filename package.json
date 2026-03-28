@@ -27,7 +27,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"check:n8n-version": "echo Running: && docker compose exec n8n n8n --version && echo Latest: && npm view n8n version",
-		"release": "release-it --git.requireBranch=master --git.requireCleanWorkingDir --git.requireUpstream --git.requireCommits --git.commit --git.tag --git.push --git.changelog=\"npx auto-changelog --stdout --unreleased --commit-limit false -u --hide-credit\" --github.release=false --hooks.before:init=\"npm run lint && npm run build\" --hooks.after:bump=\"npx auto-changelog -p\" --npm.publish=false",
+		"release": "release-it",
 		"prepublishOnly": "n8n-node prerelease"
 	},
 	"files": [
