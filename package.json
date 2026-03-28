@@ -1,15 +1,15 @@
 {
 	"name": "n8n-nodes-bambulab",
 	"version": "0.1.0",
-	"description": "",
+	"description": "n8n community node for controlling and monitoring Bambu Lab 3D printers over the local network via MQTT",
 	"license": "MIT",
 	"homepage": "",
 	"keywords": [
 		"n8n-community-node-package"
 	],
 	"author": {
-		"name": "",
-		"email": ""
+		"name": "Hanna Rosengren",
+		"email": "hanna.r.dev@gmail.com"
 	},
 	"repository": {
 		"type": "git",
@@ -32,13 +32,9 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/GithubIssuesApi.credentials.js",
-			"dist/credentials/GithubIssuesOAuth2Api.credentials.js",
 			"dist/credentials/BambuLabLanApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/GithubIssues/GithubIssues.node.js",
-			"dist/nodes/Example/Example.node.js",
 			"dist/nodes/BambuLab/BambuLab.node.js",
 			"dist/nodes/BambuLab/BambuLabTrigger.node.js"
 		]
