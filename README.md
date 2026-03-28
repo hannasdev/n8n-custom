@@ -10,7 +10,6 @@ Bambu Lab is a 3D printer platform. This package communicates with the printer d
 [Compatibility](#compatibility)
 [Usage](#usage)
 [Resources](#resources)
-[Version history](#version-history)
 
 ## Installation
 
@@ -118,12 +117,6 @@ After importing, open the workflow in n8n and re-select your **Bambu Lab Local**
 - [Bambu Lab](https://bambulab.com)
 - [ha-bambulab](https://github.com/greghesp/ha-bambulab) — acknowledged reference for MQTT topic/payload structure
 
-## Version history
+## Changelog
 
-### 0.1.0
-
-- Initial release
-- `Bambu Lab Printer` action node: get status, pause, resume, cancel, send raw command
-- `Bambu Lab Printer Trigger` node: persistent MQTT polling, state-change filtering
-- Summary and raw response modes
-- Local network credential type (host, serial, access code)
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
