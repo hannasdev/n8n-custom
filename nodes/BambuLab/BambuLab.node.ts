@@ -1,26 +1,12 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
-	INode,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes } from 'n8n-workflow';
 import { mqttRequest, PUSH_ALL, type BambuLanCredentials } from './shared/mqttClient';
-
-const PRINT_COMMANDS = {
-	pause: { print: { sequence_id: '0', command: 'pause', param: '' } },
-	resume: { print: { sequence_id: '0', command: 'resume', param: '' } },
-	cancel: { print: { sequence_id: '0', command: 'stop', param: '' } },
-} as const;
-
-const OPERATION_TO_COMMAND: Record<string, string> = {
-	getStatus: 'pushall',
-	pausePrint: 'pause',
-	resumePrint: 'resume',
-	cancelPrint: 'stop',
-};
 
 function decodePackedIpv4(value: unknown): string {
 	if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -84,74 +70,6 @@ function summarizeStatus(response: IDataObject): IDataObject {
 	};
 }
 
-function summarizeCommandResult(
-	operation: string,
-	response: IDataObject,
-	rawCommand: string | object | undefined,
-): IDataObject {
-	const print = ((response.print as IDataObject | undefined) ?? response) as IDataObject;
-	const responseMsg = Number(print.msg ?? response.msg ?? 0);
-	const responseErrorCode = Number(print.print_error ?? response.print_error ?? 0);
-	let commandPayload: IDataObject | undefined;
-
-	if (typeof rawCommand === 'string') {
-		try {
-			commandPayload = JSON.parse(rawCommand) as IDataObject;
-		} catch {
-			commandPayload = undefined;
-		}
-	} else if (typeof rawCommand === 'object' && rawCommand !== null) {
-		commandPayload = rawCommand as IDataObject;
-	}
-
-	const requestedCommandFromJson =
-		(commandPayload?.print as IDataObject | undefined)?.command ??
-		(commandPayload?.pushing as IDataObject | undefined)?.command ??
-		commandPayload?.command;
-	const requestedCommand = String(
-		requestedCommandFromJson ?? OPERATION_TO_COMMAND[operation] ?? 'unknown',
-	);
-	const responseCommand = String(print.command ?? response.command ?? '');
-
-	return {
-		requested_operation: operation,
-		requested_command: requestedCommand,
-		response_command: responseCommand,
-		response_msg: responseMsg,
-		response_error_code: responseErrorCode,
-		accepted: responseMsg === 0 && responseErrorCode === 0,
-		note:
-			responseMsg === 0 && responseErrorCode === 0
-				? 'Command accepted by printer (or no error reported)'
-				: 'Printer reported an error or non-zero response code',
-		status: summarizeStatus(response),
-	};
-}
-
-function commandForOperation(
-	operation: string,
-	rawCommand: string | object | undefined,
-	node: INode,
-): object {
-	if (operation === 'getStatus') {
-		return PUSH_ALL;
-	}
-
-	if (operation === 'sendCommand') {
-		if (rawCommand === undefined) {
-			throw new NodeOperationError(node, 'Command is required for the Send Command operation');
-		}
-
-		return typeof rawCommand === 'string' ? (JSON.parse(rawCommand) as object) : rawCommand;
-	}
-
-	if (operation === 'pausePrint') return PRINT_COMMANDS.pause;
-	if (operation === 'resumePrint') return PRINT_COMMANDS.resume;
-	if (operation === 'cancelPrint') return PRINT_COMMANDS.cancel;
-
-	throw new NodeOperationError(node, `Unknown operation: ${operation}`);
-}
-
 export class BambuLab implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Bambu Lab Printer',
@@ -159,7 +77,7 @@ export class BambuLab implements INodeType {
 		icon: 'fa:cube',
 		group: ['output'],
 		version: 1,
-		subtitle: '={{$parameter["operation"]}}',
+		subtitle: 'get status',
 		description: 'Interact with a Bambu Lab printer over the local network via MQTT',
 		defaults: {
 			name: 'Bambu Lab Printer',
@@ -173,47 +91,6 @@ export class BambuLab implements INodeType {
 			},
 		],
 		properties: [
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				noDataExpression: true,
-				options: [
-					{
-						name: 'Get Status',
-						value: 'getStatus',
-						description:
-							'Request a full status push from the printer and return the raw report payload',
-						action: 'Get printer status',
-					},
-					{
-						name: 'Pause Print',
-						value: 'pausePrint',
-						description: 'Pause the currently running print',
-						action: 'Pause the current print',
-					},
-					{
-						name: 'Resume Print',
-						value: 'resumePrint',
-						description: 'Resume a paused print',
-						action: 'Resume the current print',
-					},
-					{
-						name: 'Cancel Print',
-						value: 'cancelPrint',
-						description: 'Stop the current print',
-						action: 'Cancel the current print',
-					},
-					{
-						name: 'Send Command',
-						value: 'sendCommand',
-						description:
-							'Publish a raw JSON command to the printer and return the first report message received',
-						action: 'Send a command to the printer',
-					},
-				],
-				default: 'getStatus',
-			},
 			{
 				displayName: 'Response Mode',
 				name: 'responseMode',
@@ -247,20 +124,6 @@ export class BambuLab implements INodeType {
 				},
 			},
 			{
-				displayName: 'Command (JSON)',
-				name: 'command',
-				type: 'json',
-				default: '{}',
-				required: true,
-				description:
-					'JSON object to publish to device/&lt;serial&gt;/request. See Bambu MQTT docs for command formats.',
-				displayOptions: {
-					show: {
-						operation: ['sendCommand'],
-					},
-				},
-			},
-			{
 				displayName: 'Timeout (ms)',
 				name: 'timeoutMs',
 				type: 'number',
@@ -275,7 +138,6 @@ export class BambuLab implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		for (let i = 0; i < items.length; i++) {
-			const operation = this.getNodeParameter('operation', i) as string;
 			const responseMode = this.getNodeParameter('responseMode', i) as string;
 			const includeRawPayload = this.getNodeParameter('includeRawPayload', i) as boolean;
 			const timeoutMs = this.getNodeParameter('timeoutMs', i) as number;
@@ -288,25 +150,14 @@ export class BambuLab implements INodeType {
 			};
 
 			try {
-				const rawCommand =
-					operation === 'sendCommand'
-						? (this.getNodeParameter('command', i) as string | object)
-						: undefined;
-				const command = commandForOperation(operation, rawCommand, this.getNode());
-				const response = await mqttRequest(credentials, command, timeoutMs);
+				const response = await mqttRequest(credentials, PUSH_ALL, timeoutMs);
 				const output =
 					responseMode === 'raw'
 						? (response as IDataObject)
-						: operation === 'getStatus'
-							? summarizeStatus(response as IDataObject)
-							: summarizeCommandResult(operation, response as IDataObject, rawCommand);
+						: summarizeStatus(response as IDataObject);
 
 				if (responseMode === 'summary' && includeRawPayload) {
-					if (operation === 'getStatus') {
-						(output as IDataObject).raw_payload = response as IDataObject;
-					} else {
-						(output as IDataObject).raw_response = response as IDataObject;
-					}
+					(output as IDataObject).raw_payload = response as IDataObject;
 				}
 
 				returnData.push({

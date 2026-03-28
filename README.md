@@ -36,13 +36,9 @@ n8n is available at http://localhost:5678.
 
 An action node for on-demand operations.
 
-| Operation    | Description                                 |
-| ------------ | ------------------------------------------- |
-| Get Status   | Request a full status push from the printer |
-| Pause Print  | Pause the current print                     |
-| Resume Print | Resume a paused print                       |
-| Cancel Print | Stop the current print                      |
-| Send Command | Publish a raw JSON command to the printer   |
+| Operation  | Description                                 |
+| ---------- | ------------------------------------------- |
+| Get Status | Request a full status push from the printer |
 
 **Response mode** (Get Status):
 
