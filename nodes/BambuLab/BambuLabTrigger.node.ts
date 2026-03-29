@@ -10,6 +10,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { connect, type MqttClient } from 'mqtt';
 import { type BambuLanCredentials, PUSH_ALL } from './shared/mqttClient';
 import { summarizeStatus } from './shared/summarize';
+import { extractGcodeState, checkFieldChanges } from './shared/filter';
 
 const REPORT_TOPIC = (serial: string) => `device/${serial}/report`;
 const REQUEST_TOPIC = (serial: string) => `device/${serial}/request`;
@@ -104,11 +105,15 @@ export class BambuLabTrigger implements INodeType {
 		const reportTopic = REPORT_TOPIC(credentials.serial);
 		const requestTopic = REQUEST_TOPIC(credentials.serial);
 
-		// Persist filter state across restarts so publish/restart doesn't re-fire stale events
+		// Persist last gcode_state across restarts so stateChange mode doesn't re-fire on reconnect.
+		// lastValues is intentionally NOT persisted — anyChange mode should always emit a
+		// full snapshot on startup so the workflow has a current baseline to work from.
 		const staticData = this.getWorkflowStaticData('node') as {
 			lastState?: string;
-			lastHash?: string;
 		};
+
+		// In-memory only: resets each time the trigger activates
+		let lastValues: Record<string, unknown> = {};
 
 		let pollTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -141,22 +146,18 @@ export class BambuLabTrigger implements INodeType {
 			const output = responseMode === 'raw' ? parsed : summarizeStatus(parsed);
 
 			if (filterMode === 'stateChange') {
-				const rawState =
-					(parsed.print as IDataObject | undefined)?.gcode_state ?? parsed.gcode_state;
-				// Skip partial frames that don't carry gcode_state at all
-				if (rawState === undefined || rawState === null || rawState === '') return;
-				const currentState = String(rawState);
+				const currentState = extractGcodeState(parsed as Record<string, unknown>);
+				if (currentState === null) return;
 				if (currentState === staticData.lastState) return;
 				staticData.lastState = currentState;
 			} else if (filterMode === 'anyChange') {
-				// Always compare summarized output so noisy raw fields (sequence_id etc.) are excluded.
-				// Exclude received_at which changes on every message.
-				const summary = responseMode === 'raw' ? summarizeStatus(parsed) : output;
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-			const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
-				const hash = JSON.stringify(comparable);
-				if (hash === staticData.lastHash) return;
-				staticData.lastHash = hash;
+				const print = ((parsed.print as Record<string, unknown> | undefined) ?? parsed) as Record<
+					string,
+					unknown
+				>;
+				const { changed, nextValues } = checkFieldChanges(print, lastValues);
+				lastValues = nextValues;
+				if (changed.length === 0) return;
 			}
 
 			this.emit([this.helpers.returnJsonArray([output])]);
