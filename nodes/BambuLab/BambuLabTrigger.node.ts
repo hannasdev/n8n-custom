@@ -59,12 +59,28 @@ export class BambuLabTrigger implements INodeType {
 				default: 'summary',
 			},
 			{
-				displayName: 'Fire Only on State Change',
-				name: 'stateChangeOnly',
-				type: 'boolean',
-				default: true,
-				description:
-					'Whether to emit an event only when the printer state (e.g. RUNNING → FINISH) changes between polls',
+				displayName: 'Filter Mode',
+				name: 'filterMode',
+				type: 'options',
+				options: [
+					{
+						name: 'Any Field Change',
+						value: 'anyChange',
+						description: 'Fire whenever any status field changes (e.g. lights, temps, state)',
+					},
+					{
+						name: 'Printer State Only',
+						value: 'stateChange',
+						description: 'Fire only when the printer state changes (e.g. IDLE → RUNNING)',
+					},
+					{
+						name: 'Every Message',
+						value: 'off',
+						description: 'Fire on every MQTT message received',
+					},
+				],
+				default: 'anyChange',
+				description: 'When to emit an event',
 			},
 		],
 	};
@@ -79,7 +95,7 @@ export class BambuLabTrigger implements INodeType {
 
 		const pollIntervalSec = this.getNodeParameter('pollInterval') as number;
 		const responseMode = this.getNodeParameter('responseMode') as string;
-		const stateChangeOnly = this.getNodeParameter('stateChangeOnly') as boolean;
+		const filterMode = this.getNodeParameter('filterMode') as string;
 
 		if (pollIntervalSec < 5) {
 			throw new NodeOperationError(this.getNode(), 'Poll interval must be at least 5 seconds');
@@ -88,8 +104,11 @@ export class BambuLabTrigger implements INodeType {
 		const reportTopic = REPORT_TOPIC(credentials.serial);
 		const requestTopic = REQUEST_TOPIC(credentials.serial);
 
-		// Persist lastState across restarts so publish/restart doesn't re-fire stale states
-		const staticData = this.getWorkflowStaticData('node') as { lastState?: string };
+		// Persist filter state across restarts so publish/restart doesn't re-fire stale events
+		const staticData = this.getWorkflowStaticData('node') as {
+			lastState?: string;
+			lastHash?: string;
+		};
 
 		let pollTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -121,7 +140,7 @@ export class BambuLabTrigger implements INodeType {
 
 			const output = responseMode === 'raw' ? parsed : summarizeStatus(parsed);
 
-			if (stateChangeOnly) {
+			if (filterMode === 'stateChange') {
 				const rawState =
 					(parsed.print as IDataObject | undefined)?.gcode_state ?? parsed.gcode_state;
 				// Skip partial frames that don't carry gcode_state at all
@@ -129,6 +148,14 @@ export class BambuLabTrigger implements INodeType {
 				const currentState = String(rawState);
 				if (currentState === staticData.lastState) return;
 				staticData.lastState = currentState;
+			} else if (filterMode === 'anyChange') {
+				// Always compare summarized output so noisy raw fields (sequence_id etc.) are excluded.
+				// Exclude received_at which changes on every message.
+				const summary = responseMode === 'raw' ? summarizeStatus(parsed) : output;
+				const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
+				const hash = JSON.stringify(comparable);
+				if (hash === staticData.lastHash) return;
+				staticData.lastHash = hash;
 			}
 
 			this.emit([this.helpers.returnJsonArray([output])]);
