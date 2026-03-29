@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	extractGcodeState,
 	checkFieldChanges,
+	mergeOutput,
 	type WatchedField,
 } from '../nodes/BambuLab/shared/filter';
 
@@ -251,5 +252,106 @@ describe('checkFieldChanges — multiple fields', () => {
 		expect(nextValues.state).toBe('FINISH');
 		expect(nextValues.progress_pct).toBe(100);
 		expect(nextValues.bed_temp_c).toBe(25);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// mergeOutput
+// ---------------------------------------------------------------------------
+
+describe('mergeOutput', () => {
+	const SOURCES: Record<string, string[]> = {
+		state: ['gcode_state'],
+		bed_temp_c: ['bed_temper'],
+		nozzle_temp_c: ['nozzle_temper'],
+		task_name: ['subtask_name'],
+	};
+
+	it('overlays present fields from currentSummary onto previousOutput', () => {
+		const result = mergeOutput(
+			{
+				state: 'RUNNING',
+				bed_temp_c: 60,
+				nozzle_temp_c: 200,
+				task_name: 'my_print',
+				received_at: 'now',
+			},
+			{ state: 'IDLE', bed_temp_c: 20, nozzle_temp_c: 20, task_name: '', received_at: 'before' },
+			{ gcode_state: 'RUNNING', bed_temper: 60, nozzle_temper: 200, subtask_name: 'my_print' },
+			SOURCES,
+		);
+		expect(result.state).toBe('RUNNING');
+		expect(result.bed_temp_c).toBe(60);
+	});
+
+	it('keeps previousOutput value when source key is absent from frame', () => {
+		// Only bed_temper present — nozzle_temper, gcode_state, subtask_name absent
+		const result = mergeOutput(
+			{ state: 'unknown', bed_temp_c: 60, nozzle_temp_c: 0, task_name: '', received_at: 'now' },
+			{
+				state: 'RUNNING',
+				bed_temp_c: 20,
+				nozzle_temp_c: 200,
+				task_name: 'my_print',
+				received_at: 'before',
+			},
+			{ bed_temper: 60 },
+			SOURCES,
+		);
+		expect(result.bed_temp_c).toBe(60); // updated
+		expect(result.state).toBe('RUNNING'); // preserved
+		expect(result.nozzle_temp_c).toBe(200); // preserved
+		expect(result.task_name).toBe('my_print'); // preserved
+	});
+
+	it('always updates received_at regardless of sources', () => {
+		const result = mergeOutput(
+			{ received_at: '2026-01-01T12:00:00Z' },
+			{ received_at: '2026-01-01T11:00:00Z' },
+			{},
+			SOURCES,
+		);
+		expect(result.received_at).toBe('2026-01-01T12:00:00Z');
+	});
+
+	it('does not mutate previousOutput', () => {
+		const prev = { state: 'IDLE', bed_temp_c: 20, received_at: 'before' };
+		mergeOutput(
+			{ state: 'RUNNING', bed_temp_c: 60, received_at: 'now' },
+			prev,
+			{ gcode_state: 'RUNNING', bed_temper: 60 },
+			SOURCES,
+		);
+		expect(prev.state).toBe('IDLE');
+		expect(prev.bed_temp_c).toBe(20);
+	});
+
+	it('builds a correct accumulated snapshot across two partial frames', () => {
+		// First frame: full state
+		const after1 = mergeOutput(
+			{ state: 'RUNNING', bed_temp_c: 60, nozzle_temp_c: 200, task_name: 'job', received_at: 't1' },
+			{},
+			{ gcode_state: 'RUNNING', bed_temper: 60, nozzle_temper: 200, subtask_name: 'job' },
+			SOURCES,
+		);
+		expect(after1).toMatchObject({
+			state: 'RUNNING',
+			bed_temp_c: 60,
+			nozzle_temp_c: 200,
+			task_name: 'job',
+		});
+
+		// Second frame: only bed_temper changes
+		const after2 = mergeOutput(
+			{ state: 'unknown', bed_temp_c: 80, nozzle_temp_c: 0, task_name: '', received_at: 't2' },
+			after1,
+			{ bed_temper: 80 },
+			SOURCES,
+		);
+		expect(after2.bed_temp_c).toBe(80); // updated
+		expect(after2.nozzle_temp_c).toBe(200); // preserved from frame 1
+		expect(after2.state).toBe('RUNNING'); // preserved from frame 1
+		expect(after2.task_name).toBe('job'); // preserved from frame 1
+		expect(after2.received_at).toBe('t2'); // always updated
 	});
 });

@@ -40,6 +40,75 @@ export function extractGcodeState(parsed: Record<string, unknown>): string | nul
 export type FieldChange = { key: string; from: unknown; to: unknown };
 
 /**
+ * Maps each summarized output field to the raw source keys that produce it.
+ * A field is considered "present" in a frame if at least one source key is
+ * defined on the raw `print` object. Used by mergeOutput to prevent partial
+ * frames from overwriting accumulated state with summarizeStatus defaults.
+ */
+export const OUTPUT_SOURCES: Record<string, string[]> = {
+	state: ['gcode_state', 'state'],
+	print_type: ['print_type'],
+	stage: ['mc_print_stage', 'stage'],
+	progress_pct: ['mc_percent', 'progress_pct'],
+	remaining_min: ['mc_remaining_time', 'remaining_min'],
+	current_layer: ['layer_num', 'current_layer'],
+	total_layers: ['total_layer_num', 'total_layers'],
+	task_name: ['subtask_name', 'task_name'],
+	project_id: ['project_id'],
+	profile_id: ['profile_id'],
+	task_id: ['task_id'],
+	subtask_id: ['subtask_id'],
+	wifi_signal: ['wifi_signal'],
+	local_ip: ['net', 'local_ip'],
+	nozzle_temp_c: ['nozzle_temper', 'nozzle_temp_c'],
+	nozzle_target_c: ['nozzle_target_temper', 'nozzle_target_c'],
+	bed_temp_c: ['bed_temper', 'bed_temp_c'],
+	bed_target_c: ['bed_target_temper', 'bed_target_c'],
+	chamber_temp_c: ['chamber_temper', 'chamber_temp_c'],
+	heatbreak_fan_speed: ['heatbreak_fan_speed'],
+	cooling_fan_speed: ['cooling_fan_speed'],
+	aux_fan1_speed: ['big_fan1_speed', 'aux_fan1_speed'],
+	aux_fan2_speed: ['big_fan2_speed', 'aux_fan2_speed'],
+	speed_level: ['spd_lvl', 'speed_level'],
+	speed_percent: ['spd_mag', 'speed_percent'],
+	error_code: ['print_error', 'error_code'],
+	chamber_light: ['lights_report'],
+	ams_status: ['ams_status'],
+	active_tray_id: ['vt_tray', 'active_tray_id'],
+	tray_type: ['vt_tray', 'tray_type'],
+	tray_material: ['vt_tray', 'tray_material'],
+	tray_color: ['vt_tray', 'tray_color'],
+	tray_k: ['vt_tray', 'tray_k'],
+	nozzle_diameter: ['nozzle_diameter'],
+	nozzle_type: ['nozzle_type'],
+	sdcard_mounted: ['sdcard_mounted', 'sdcard'],
+	printer_online: ['printer_online', 'online'],
+};
+
+/**
+ * Merges a newly summarized frame into an accumulated output snapshot.
+ * Only overwrites a field when at least one of its raw source keys is present
+ * in the frame — absent fields keep their previously accumulated value.
+ * `received_at` is always updated from the current frame.
+ * Does not mutate `previousOutput`.
+ */
+export function mergeOutput(
+	currentSummary: Record<string, unknown>,
+	previousOutput: Record<string, unknown>,
+	print: Record<string, unknown>,
+	sources: Record<string, string[]> = OUTPUT_SOURCES,
+): Record<string, unknown> {
+	const result = { ...previousOutput };
+	for (const [key, rawSources] of Object.entries(sources)) {
+		if (rawSources.some((s) => print[s] !== undefined)) {
+			result[key] = currentSummary[key];
+		}
+	}
+	result.received_at = currentSummary.received_at;
+	return result;
+}
+
+/**
  * Compares watched fields from a raw MQTT `print` frame against `lastValues`.
  * Returns the list of changed fields and an updated (shallow) copy of lastValues.
  *

@@ -10,7 +10,7 @@ import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { connect, type MqttClient } from 'mqtt';
 import { type BambuLanCredentials, PUSH_ALL } from './shared/mqttClient';
 import { summarizeStatus } from './shared/summarize';
-import { extractGcodeState, checkFieldChanges } from './shared/filter';
+import { extractGcodeState, checkFieldChanges, mergeOutput } from './shared/filter';
 
 const REPORT_TOPIC = (serial: string) => `device/${serial}/report`;
 const REQUEST_TOPIC = (serial: string) => `device/${serial}/request`;
@@ -114,6 +114,7 @@ export class BambuLabTrigger implements INodeType {
 
 		// In-memory only: resets each time the trigger activates
 		let lastValues: Record<string, unknown> = {};
+		let accumulatedOutput: Record<string, unknown> = {};
 
 		let pollTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -158,9 +159,21 @@ export class BambuLabTrigger implements INodeType {
 				const { changed, nextValues } = checkFieldChanges(print, lastValues);
 				lastValues = nextValues;
 				if (changed.length === 0) return;
+				// Merge partial frame into accumulated snapshot so emitted output is always complete
+				if (responseMode === 'summary') {
+					accumulatedOutput = mergeOutput(
+						output as Record<string, unknown>,
+						accumulatedOutput,
+						print,
+					);
+				}
 			}
 
-			this.emit([this.helpers.returnJsonArray([output])]);
+			const emitOutput =
+				filterMode === 'anyChange' && responseMode === 'summary'
+					? (accumulatedOutput as IDataObject)
+					: output;
+			this.emit([this.helpers.returnJsonArray([emitOutput])]);
 		};
 
 		// ── Manual (test) mode: connect, send one PUSH_ALL, wait for one reply ──
