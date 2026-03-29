@@ -152,7 +152,8 @@ export class BambuLabTrigger implements INodeType {
 				// Always compare summarized output so noisy raw fields (sequence_id etc.) are excluded.
 				// Exclude received_at which changes on every message.
 				const summary = responseMode === 'raw' ? summarizeStatus(parsed) : output;
-				const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
 				const hash = JSON.stringify(comparable);
 				if (hash === staticData.lastHash) return;
 				staticData.lastHash = hash;
