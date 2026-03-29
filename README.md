@@ -46,15 +46,42 @@ An action node for on-demand operations.
 
 ### Node: Bambu Lab Printer Trigger
 
-A trigger node for event-driven workflows. Maintains a persistent MQTT connection and polls the printer on an interval.
+A trigger node for event-driven workflows. Maintains a persistent MQTT connection and polls the printer on a configurable interval.
 
-| Parameter                 | Description                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------------ |
-| Poll Interval (seconds)   | How often to request fresh status (minimum 5s, default 30s)                          |
-| Response Mode             | Summary or Raw (same as above)                                                       |
-| Fire Only on State Change | When enabled, only emits when `gcode_state` changes (e.g. `IDLE → RUNNING → FINISH`) |
+| Parameter               | Description                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Poll Interval (seconds) | How often to request fresh status from the printer (minimum 5s, default 30s) |
+| Response Mode           | **Summary** — normalized fields. **Raw** — full MQTT payload                 |
+| Filter Mode             | Controls when events are emitted (see below)                                 |
 
-**Tip:** Enable "Fire Only on State Change" to build notification workflows that fire on print complete, print error, etc. without spamming on every poll.
+**Filter modes:**
+
+| Mode                             | Behaviour                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Any Field Change** _(default)_ | Emits a full snapshot on startup, then fires again whenever a watched field crosses its threshold |
+| **Printer State Only**           | Fires only when `gcode_state` changes (e.g. `IDLE → RUNNING → FINISH`)                            |
+| **Every Message**                | Fires on every MQTT message received — use with care                                              |
+
+**Any Field Change options** (shown when that mode is selected):
+
+| Parameter                  | Default                                     | Description                                                                                 |
+| -------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Trigger On Fields          | State, Stage, Layer, Progress, Temps, Error | Checklist of which fields can trigger an event. All fields appear in the output regardless. |
+| Layer Change Threshold     | 1                                           | Minimum layers between events                                                               |
+| Progress Threshold (%)     | 5                                           | Minimum % progress change between events                                                    |
+| Temperature Threshold (°C) | 2                                           | Minimum °C change for actual temps (nozzle, bed, chamber)                                   |
+| Target Temp Threshold (°C) | 1                                           | Minimum °C change for target temperatures                                                   |
+
+**Output fields** (in Summary mode) include: `state`, `stage`, `progress_pct`, `current_layer`, `total_layers`, `nozzle_temp_c`, `bed_temp_c`, `nozzle_target_c`, `bed_target_c`, `chamber_temp_c`, `task_name`, `error_code`, `speed_level`, `chamber_light`, `wifi_signal`, `received_at`, and more.
+
+In **Any Field Change** mode the output also includes a `triggered_by` object showing which fields changed and their before/after values — useful for debugging unexpected events:
+
+```json
+"triggered_by": {
+  "current_layer": { "from": 20, "to": 25 },
+  "progress_pct": { "from": 23, "to": 28 }
+}
+```
 
 ## Credentials
 
@@ -94,9 +121,21 @@ Known behavior:
 ### Example: Print complete notification
 
 1. Add a **Bambu Lab Printer Trigger** node
-2. Enable **Fire Only on State Change**
+2. Set **Filter Mode** to **Printer State Only**
 3. Connect an **IF** node: condition `state` equals `FINISH`
 4. Connect a **Telegram** (or other) node to send a notification
+
+### Example: Layer progress updates
+
+1. Add a **Bambu Lab Printer Trigger** node
+2. Leave **Filter Mode** as **Any Field Change**
+3. Set **Layer Change Threshold** to `10` (fires every 10 layers)
+4. Uncheck all **Trigger On Fields** except **Current Layer**
+5. Use `current_layer` and `total_layers` in your downstream nodes
+
+### Example: Debugging unexpected events
+
+If the trigger fires more often than expected, check the `triggered_by` field in the output — it shows exactly which field crossed its threshold (e.g. `{ "progress_pct": { "from": 23, "to": 28 } }`). Uncheck that field in **Trigger On Fields** or raise its threshold.
 
 ### Included workflow templates
 
