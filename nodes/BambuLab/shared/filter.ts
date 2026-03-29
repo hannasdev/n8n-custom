@@ -4,25 +4,61 @@ export type WatchedField = {
 	threshold?: number;
 };
 
-export const WATCHED_FIELDS: WatchedField[] = [
-	{ raw: ['gcode_state', 'state'], key: 'state' },
-	{ raw: ['print_type'], key: 'print_type' },
-	{ raw: ['mc_print_stage', 'stage'], key: 'stage' },
-	{ raw: ['subtask_name', 'task_name'], key: 'task_name' },
-	{ raw: ['project_id'], key: 'project_id' },
-	{ raw: ['mc_percent'], key: 'progress_pct', threshold: 1 },
-	{ raw: ['mc_remaining_time'], key: 'remaining_min', threshold: 1 },
-	{ raw: ['layer_num'], key: 'current_layer', threshold: 1 },
-	// Actual temps: 2 °C threshold absorbs idle sensor wobble
-	{ raw: ['nozzle_temper', 'nozzle_temp_c'], key: 'nozzle_temp_c', threshold: 2 },
-	{ raw: ['bed_temper', 'bed_temp_c'], key: 'bed_temp_c', threshold: 2 },
-	{ raw: ['chamber_temper', 'chamber_temp_c'], key: 'chamber_temp_c', threshold: 2 },
-	// Target temps: 1 °C — targets are set deliberately so even small changes matter
-	{ raw: ['nozzle_target_temper', 'nozzle_target_c'], key: 'nozzle_target_c', threshold: 1 },
-	{ raw: ['bed_target_temper', 'bed_target_c'], key: 'bed_target_c', threshold: 1 },
-	{ raw: ['print_error'], key: 'error_code' },
-	{ raw: ['spd_lvl'], key: 'speed_level' },
-];
+export type ThresholdOptions = {
+	layerThreshold: number;
+	progressThreshold: number;
+	tempThreshold: number;
+	targetTempThreshold: number;
+};
+
+export const DEFAULT_THRESHOLDS: ThresholdOptions = {
+	layerThreshold: 1,
+	progressThreshold: 5,
+	tempThreshold: 2,
+	targetTempThreshold: 1,
+};
+
+export function buildWatchedFields(
+	t: ThresholdOptions = DEFAULT_THRESHOLDS,
+	enabledFields?: string[],
+): WatchedField[] {
+	const all: WatchedField[] = [
+		{ raw: ['gcode_state', 'state'], key: 'state' },
+		{ raw: ['print_type'], key: 'print_type' },
+		{ raw: ['mc_print_stage', 'stage'], key: 'stage' },
+		{ raw: ['subtask_name', 'task_name'], key: 'task_name' },
+		{ raw: ['project_id'], key: 'project_id' },
+		{ raw: ['mc_percent'], key: 'progress_pct', threshold: t.progressThreshold },
+		// remaining_min is intentionally excluded: it's a constantly-ticking estimate
+		// that would fire an event every minute regardless of any real state change.
+		{ raw: ['layer_num'], key: 'current_layer', threshold: t.layerThreshold },
+		{ raw: ['nozzle_temper', 'nozzle_temp_c'], key: 'nozzle_temp_c', threshold: t.tempThreshold },
+		{ raw: ['bed_temper', 'bed_temp_c'], key: 'bed_temp_c', threshold: t.tempThreshold },
+		{
+			raw: ['chamber_temper', 'chamber_temp_c'],
+			key: 'chamber_temp_c',
+			threshold: t.tempThreshold,
+		},
+		{
+			raw: ['nozzle_target_temper', 'nozzle_target_c'],
+			key: 'nozzle_target_c',
+			threshold: t.targetTempThreshold,
+		},
+		{
+			raw: ['bed_target_temper', 'bed_target_c'],
+			key: 'bed_target_c',
+			threshold: t.targetTempThreshold,
+		},
+		{ raw: ['print_error'], key: 'error_code' },
+		{ raw: ['spd_lvl'], key: 'speed_level' },
+		// Fan speeds are excluded: they fluctuate by ±1 unit continuously and are
+		// available in output but should not drive trigger events.
+	];
+	return enabledFields ? all.filter((f) => enabledFields.includes(f.key)) : all;
+}
+
+// Backwards-compatible default export used by tests that don't need custom thresholds
+export const WATCHED_FIELDS: WatchedField[] = buildWatchedFields();
 
 /**
  * Extracts the printer state string from a raw MQTT payload.
