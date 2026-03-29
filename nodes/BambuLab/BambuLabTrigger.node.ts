@@ -151,10 +151,24 @@ export class BambuLabTrigger implements INodeType {
 			} else if (filterMode === 'anyChange') {
 				// Always compare summarized output so noisy raw fields (sequence_id etc.) are excluded.
 				// Exclude received_at which changes on every message.
+				// Round temperature fields to 1 decimal to avoid hash churn from floating-point noise.
 				const summary = responseMode === 'raw' ? summarizeStatus(parsed) : output;
 				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-			const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
-				const hash = JSON.stringify(comparable);
+				const { received_at: _ignored, ...comparable } = summary as Record<string, unknown>;
+				const TEMP_FIELDS = [
+					'nozzle_temp_c',
+					'nozzle_target_c',
+					'bed_temp_c',
+					'bed_target_c',
+					'chamber_temp_c',
+				];
+				const normalized = { ...comparable };
+				for (const field of TEMP_FIELDS) {
+					if (typeof normalized[field] === 'number') {
+						normalized[field] = Math.round((normalized[field] as number) * 10) / 10;
+					}
+				}
+				const hash = JSON.stringify(normalized);
 				if (hash === staticData.lastHash) return;
 				staticData.lastHash = hash;
 			}
