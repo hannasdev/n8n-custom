@@ -218,6 +218,7 @@ export class BambuLabTrigger implements INodeType {
 					clientId: `n8n-bambulab-trigger-${Date.now()}`,
 					clean: true,
 					connectTimeout: 10_000,
+					reconnectPeriod: 2_000,
 					rejectUnauthorized: false,
 				});
 
@@ -310,7 +311,16 @@ export class BambuLabTrigger implements INodeType {
 				handleMessage(payload);
 			});
 
-			activeClient.subscribe(reportTopic);
+			// Re-subscribe every time the connection is (re)established. Without this, a
+			// reconnect after being kicked (e.g. by another MQTT client connecting to the
+			// printer) would restore the socket but leave the topic unsubscribed.
+			activeClient.on('connect', () => {
+				activeClient!.subscribe(reportTopic);
+			});
+
+			// Prevent unhandled EventEmitter errors when the printer drops the connection.
+			// mqtt.js will retry automatically via reconnectPeriod.
+			activeClient.on('error', () => {});
 
 			// Send first request immediately, then on interval
 			const sendPoll = () => {
