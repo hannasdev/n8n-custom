@@ -115,6 +115,7 @@ Known behavior:
 
 - Imported workflows require credentials to be re-selected once in the UI to bind local credential IDs.
 - The Bambu MQTT broker is point-to-point — report messages are only delivered to the requesting client, not broadcast. This is why the trigger node sends its own PUSH_ALL request rather than passively subscribing.
+- Bambu printers allow only one MQTT client at a time. If another device connects to the printer while the trigger node is running, the node will be disconnected. It reconnects automatically within a few seconds and resumes polling, but any events that occurred during the reconnect window will be missed.
 
 ## Usage
 
